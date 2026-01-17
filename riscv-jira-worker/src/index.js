@@ -63,7 +63,45 @@ function textToADF(text) {
 async function createJiraIssue(env, formData) {
   const { JIRA_USER_EMAIL, JIRA_API_TOKEN, JIRA_SERVER_URL, JIRA_PROJECT_KEY } = env;
 
-  // Build the description with proposer info
+  const cleanEmail = normalizeEmail(JIRA_USER_EMAIL);
+  const cleanToken = normalizeToken(JIRA_API_TOKEN);
+  
+  const auth = toBase64Utf8(`${cleanEmail}:${cleanToken}`);
+
+  const tokenFingerprint = await sha256Fingerprint(cleanToken);
+  console.log('Debug Info:', {
+    url: JIRA_SERVER_URL,
+    project: JIRA_PROJECT_KEY,
+    email: `${cleanEmail.substring(0, 3)}***`,
+    tokenLength: cleanToken.length,
+    tokenFingerprint
+  });
+
+  // 1. Verify Authentication & Identity
+  try {
+    const whoami = await fetch(`${JIRA_SERVER_URL}/rest/api/3/myself`, {
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (whoami.ok) {
+      const user = await whoami.json();
+      console.log('Authenticated User:', {
+        displayName: user.displayName,
+        email: user.emailAddress,
+        accountId: user.accountId
+      });
+    } else {
+      const errorText = await whoami.text();
+      console.error('Auth Verification Failed:', errorText);
+    }
+  } catch (err) {
+    console.error('Auth check error:', err);
+  }
+
+  // 2. Build the description
   const proposerInfo = `**Proposer Information:**
 - Name: ${formData.firstName} ${formData.lastName}
 - Email: ${formData.email}
@@ -72,7 +110,7 @@ async function createJiraIssue(env, formData) {
 **Proposal Details:**
 ${formData.description || 'No details provided.'}`;
 
-  // Build the issue payload
+  // 3. Build the issue payload
   const issueData = {
     fields: {
       project: {
@@ -87,9 +125,9 @@ ${formData.description || 'No details provided.'}`;
       [CUSTOM_FIELDS.ISA_TYPE]: {
         value: formData.isaType || 'ISA'
       },
-      // Fast Track field (boolean-like select)
+      // Fast Track field
       [CUSTOM_FIELDS.FAST_TRACK]: {
-        value: formData.fastTrack === true || formData.fastTrack === 'true' ? 'Yes' : 'No'
+        value: formData.fastTrack === 'Yes' || formData.fastTrack === true || formData.fastTrack === 'true' ? 'Yes' : 'No'
       }
     }
   };
@@ -101,25 +139,17 @@ ${formData.description || 'No details provided.'}`;
 
   // Add Extensions if provided
   if (formData.extensions && formData.extensions.length > 0) {
-    // Extensions is a multi-value text field
-    const extensionsList = Array.isArray(formData.extensions)
-      ? formData.extensions
-      : formData.extensions.split(',').map(e => e.trim()).filter(e => e);
-
-    if (extensionsList.length > 0) {
-      issueData.fields[CUSTOM_FIELDS.EXTENSIONS] = extensionsList;
-    }
+    issueData.fields[CUSTOM_FIELDS.EXTENSIONS] = formData.extensions;
   }
 
-  // Create the issue via Jira API
-  const auth = btoa(`${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}`);
-
+  // 4. Create the issue
   const response = await fetch(`${JIRA_SERVER_URL}/rest/api/3/issue`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${auth}`,
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'X-Atlassian-Token': 'no-check'
     },
     body: JSON.stringify(issueData)
   });
@@ -137,6 +167,37 @@ ${formData.description || 'No details provided.'}`;
     id: result.id,
     url: `${JIRA_SERVER_URL}/browse/${result.key}`
   };
+}
+
+function normalizeEmail(value) {
+  return (value || '').trim().replace(/^["']+|["']+$/g, '');
+}
+
+function normalizeToken(value) {
+  return (value || '')
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/\s+/g, '');
+}
+
+async function sha256Fingerprint(value) {
+  const bytes = new TextEncoder().encode(value);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hex.slice(0, 12);
+}
+
+/**
+ * Base64 encode a UTF-8 string in a Worker runtime.
+ */
+function toBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 /**
@@ -224,7 +285,7 @@ export default {
 
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to create Jira issue. Please try again later.'
+        error: error.message || 'Failed to create Jira issue.'
       }), {
         status: 500,
         headers: { ...cors, 'Content-Type': 'application/json' }
