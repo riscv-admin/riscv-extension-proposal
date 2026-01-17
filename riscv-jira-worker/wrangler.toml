@@ -1,0 +1,13 @@
+name = "riscv-jira-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables (secrets set via wrangler secret put)
+# JIRA_USER_EMAIL - Your Jira user email
+# JIRA_API_TOKEN - Your Jira API token
+# JIRA_SERVER_URL - Your Jira server URL (e.g., https://yourcompany.atlassian.net)
+
+[vars]
+# Non-sensitive configuration
+JIRA_PROJECT_KEY = "RVS"
+ALLOWED_ORIGIN = "https://riscv-admin.github.io"

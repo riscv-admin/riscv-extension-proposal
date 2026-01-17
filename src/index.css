@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom radio button styling */
+input[type="radio"]:checked {
+  background-color: #FDB515;
+  border-color: #FDB515;
+}
+
+input[type="radio"]:focus {
+  --tw-ring-color: #FDB515;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom focus styles */
+input:focus,
+textarea:focus,
+select:focus {
+  --tw-ring-color: #FDB515;
+}
+
+/* Form input transitions */
+input,
+textarea,
+select {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* File drop zone hover effect */
+.border-dashed:hover {
+  border-color: #FDB515;
+}
+
+/* Button hover effects */
+button {
+  transition: all 0.2s ease;
+}
+
+/* Accessible focus outlines */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #FDB515;
+  outline-offset: 2px;
+}
+
+/* Loading spinner animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
